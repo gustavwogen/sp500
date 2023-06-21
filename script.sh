@@ -1,43 +1,14 @@
-poetry export --without-hashes --format=requirements.txt > requirements.txt
+cd sp500_to_csv
 
-rm -rf python
-mkdir python
-cd python
+zip -r lambda_function.zip .
 
-echo "*" >> .gitignore
+aws s3 cp lambda_function.zip s3://gurrastav/sp500/
 
-python3.10 -m pip install -r ../requirements.txt -t . --platform manylinux2014_x86_64 --only-binary=:all:
+rm -rf lambda_function.zip
 
-# remove unnecessary files
-rm -rf *.dist-info
-find . -name "tests" -type d | xargs -I{} rm -rf {}
-find . -name "docs" -type d | xargs -I{} rm -rf {}
-find . -name "__pycache__" -type d | xargs -I{} rm -rf {}
-rm -rf boto*
+latest_s3_version=$(aws s3api list-object-versions --bucket gurrastav --prefix sp500/lambda_function.zip --query 'Versions[?IsLatest].[VersionId]' --output text)
 
-cd ..
-rm python.zip
-
-echo "Starting zipping"
-zip -r python.zip python -q
-echo "Completed zipping"
-
-echo "Attempting upload to S3"
-aws s3 cp python.zip s3://gurrastav/sp500/
-echo "Upload complete"
-
-latest_s3_version=$(aws s3api list-object-versions --bucket gurrastav --prefix sp500/python.zip --query 'Versions[?IsLatest].[VersionId]' --output text)
-
-echo "publish-layer-version"
-aws lambda publish-layer-version \
-    --layer-name sp500_to_csv \
-    --content S3Bucket=gurrastav,S3Key=sp500/python.zip,S3ObjectVersion=$latest_s3_version \
-    --compatible-runtimes python3.10 \
-    --compatible-architectures x86_64
-
-
-latest_layer_version=$(aws lambda list-layer-versions --layer-name sp500_to_csv --query 'LayerVersions[0].LayerVersionArn' --output text)
-
-echo "update-function-config"
-aws lambda update-function-configuration --function-name sp500_to_csv \
-    --layers $latest_layer_version
+aws lambda update-function-code --function-name sp500_to_csv \
+    --s3-bucket gurrastav \
+    --s3-key sp500/lambda_function.zip \
+    --s3-object-version $latest_s3_version
