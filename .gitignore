@@ -3,3 +3,4 @@ __pycache__
 python.zip
 sp500.code-workspace
 *.ipynb
+*.DS_Store
