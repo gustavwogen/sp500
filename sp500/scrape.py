@@ -35,8 +35,8 @@ def create_sp500_df(soup: BeautifulSoup) -> pd.DataFrame:
 
     df = pd.DataFrame(rows, columns=cols)
     df["Price"] = df["Price"].apply(lambda x: sub(r"[^\d.]", "", x))
-    df = df.astype({"#": "int", "Weight": "float", "Price": "float", "Chg": "float"})
-    return df
+    df = df.astype({"Weight": "float", "Price": "float", "Chg": "float"})
+    return df[["Company", "Symbol", "Weight", "Price", "Chg", "% Chg"]]
 
 
 def upload_df_to_s3(df: pd.DataFrame, bucket: str, dest_key: str) -> None:
@@ -47,8 +47,8 @@ def upload_df_to_s3(df: pd.DataFrame, bucket: str, dest_key: str) -> None:
         client.upload_fileobj(csv_buffer, bucket, dest_key)
 
 
-def upload_df_to_sql(df, table):
-    conn_string = f"mysql+mysqlconnector://{os.getenv('USERNAME')}:{os.getenv('PASSWORD')}@{os.getenv('HOST')}/{os.getenv('DATABASE')}"
+def upload_df_to_sql(df, user, password, host, database, table):
+    conn_string = f"mysql+mysqlconnector://{user}:{password}@{host}/{database}"
     engine = create_engine(conn_string)
     with engine.connect() as connection:
         utc_now = pytz.utc.localize(datetime.utcnow())
@@ -57,7 +57,7 @@ def upload_df_to_sql(df, table):
         ) - timedelta(1)
 
         with connection.begin():
-            query = text("select max(Date) from Stocks")
+            query = text(f"select max(Date) from {table}")
             res = connection.execute(query)
             for line in res:
                 if line[0] is None:
@@ -76,10 +76,11 @@ def upload_df_to_sql(df, table):
 def main() -> None:
     soup_obj = scrape_sp500(SP500_URL)
     df = create_sp500_df(soup_obj)
-    utc_now = pytz.utc.localize(datetime.utcnow())
-    est_yesterday = utc_now.astimezone(pytz.timezone("America/New_York")) - timedelta(1)
-    upload_df_to_s3(df, S3_BUCKET, f"sp500/{est_yesterday.strftime('%Y_%m_%d')}.csv")
-    upload_df_to_sql(df, "Stocks")
+    print(df)
+    # utc_now = pytz.utc.localize(datetime.utcnow())
+    # est_yesterday = utc_now.astimezone(pytz.timezone("America/New_York")) - timedelta(1)
+    # upload_df_to_s3(df, S3_BUCKET, f"sp500/{est_yesterday.strftime('%Y_%m_%d')}.csv")
+    # upload_df_to_sql(df, "Stocks")
 
 
 if __name__ == "__main__":

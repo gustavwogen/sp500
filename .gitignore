@@ -4,3 +4,4 @@ python.zip
 sp500.code-workspace
 *.ipynb
 *.DS_Store
+.DS_Store
